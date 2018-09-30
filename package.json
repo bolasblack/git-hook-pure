@@ -1,0 +1,11 @@
+{
+  "name": "git-hook-pure",
+  "version": "1.0.1",
+  "description": "git hook more freely and quickly",
+  "main": null,
+  "author": "c4605 <bolasblack@gmail.com>",
+  "license": "MIT",
+  "scripts": {
+    "postinstall": "./install.sh"
+  }
+}
