@@ -2,3 +2,5 @@
 # yarn lockfile v1
 
 
+"git-hook-pure@file:.":
+  version "1.0.0"

@@ -29,7 +29,8 @@ else
   selfFullPath=$PWD/$0
 fi
 
-templateFullPath=${selfFullPath%/*}/git-hook-template.sh
+defualtTemplateFullPath=${selfFullPath%/*}/git-hook-template.sh
+templateFullPath=${1:-$defualtTemplateFullPath}
 
 gitFullPath=`git rev-parse --show-toplevel`
 
