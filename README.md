@@ -12,20 +12,7 @@ yarn add git-hook-pure -D
 npm install git-hook-pure --save-dev
 ```
 
-Then add npm script `postinstall` in `package.json`
-
-```js
-{
-  // ...
-  "scripts": {
-    "postinstall": "./node_modules/git-hook-pure/install.sh"
-  }
-}
-```
-
-Then run `npm install` or `yarn`. Please backup your `.git/hooks` at first.
-
-Will create a folder `.githooks` in the same level as `.git`. And **OVERWRITE** all git hooks in `.git/hooks`.
+Will create a folder `.githooks` in the same level as `.git`. And append code to all git hooks in `.git/hooks`.
 
 You can put an executable file in `.githooks/` or `.githooks/[hookName]/`.
 

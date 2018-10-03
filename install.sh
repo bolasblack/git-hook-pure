@@ -1,49 +1,66 @@
 #!/bin/bash
 
-hookNames=`cat <<EOF
-applypatch-msg
-commit-msg
-post-applypatch
-post-checkout
-post-commit
-post-merge
-post-receive
-post-rewrite
-post-update
-pre-applypatch
-pre-auto-gc
-pre-commit
-pre-push
-pre-rebase
-pre-receive
-prepare-commit-msg
-push-to-checkout
-sendemail-validate
-update
-EOF`
-
 # check $0 is absolute path
 if [ ${0::1} = "/" ]; then
-  selfFullPath=$0
+  selfFullPath="$0"
 else
-  selfFullPath=$PWD/$0
+  selfFullPath="$PWD/$0"
 fi
 
-defualtTemplateFullPath=${selfFullPath%/*}/git-hook-template.sh
-templateFullPath=${1:-$defualtTemplateFullPath}
+source $(dirname $selfFullPath)/helpers.sh
 
-gitFullPath=`git rev-parse --show-toplevel`
+defualtTemplateContent=`cat ${selfFullPath%/*}/git-hook-template.sh`
+if [ $# -lt 1 ]; then
+  templateContent=`echo "$defualtTemplateContent" | tail -n+3`
+  hashbangMatcher='\(bash\|zsh\|sh\)$'
+  templateContentHashbang=`echo "$defualtTemplateContent" | head -n1`
+else
+  templateContent=`cat $1`
+  if hasHashbang $templateContent; then
+    hashbangMatcher=`echo "$templateContent" | head -n1`
+    templateContentHashbang=$hashbangMatcher
+    templateContent=`echo "$templateContent" | tail -n+2`
+  fi
+fi
+
+function installCode() {
+  local hookFullPath=$1
+  local insertContent=`cat <<EOF
+
+# ================== $templateBannerStart ==================
+$templateContent
+# ================== $templateBannerEnd ==================
+EOF`
+
+  if [ ! -e "$hookFullPath" ]; then
+    mkdir -p `dirname $hookFullPath`
+    echo -e "$templateContentHashbang\n$insertContent" > "$hookFullPath"
+    chmod u+x "$hookFullPath"
+    return
+  fi
+
+  if [ -z "`cat $hookFullPath | tr -d '[[:space:]]'`" ]; then
+    echo -e "$templateContentHashbang\n$insertContent" > "$hookFullPath"
+    return
+  fi
+
+  if ! cat "$hookFullPath" | head -n1 | grep -m1 -qe "$hashbangMatcher"; then
+    echo "[git-hook-pure] WARNING: $hookFullPath install failed: hash bang not match $hashbangMatcher."
+    return
+  fi
+
+  cleanCode $hookFullPath
+  echo -e "$insertContent" >> "$hookFullPath"
+}
 
 for hn in $hookNames; do
-  cp $templateFullPath $gitFullPath/.git/hooks/$hn
-  chmod u+x $gitFullPath/.git/hooks/$hn
+  installCode "$gitFullPath"/.git/hooks/$hn
 done
-
-if [ ! -e $gitFullPath/.githooks ]; then
-  mkdir $gitFullPath/.githooks
-  touch $gitFullPath/.githooks/.gitkeep
+if [ ! -e "$gitFullPath"/.githooks ]; then
+  mkdir "$gitFullPath"/.githooks
+  touch "$gitFullPath"/.githooks/.gitkeep
 else
-  if [ ! -d $gitFullPath/.githooks ]; then
+  if [ ! -d "$gitFullPath"/.githooks ]; then
     echo "[git-hook-pure] WARNING: $gitFullPath/.githooks existed but not a directory!"
     exit
   fi

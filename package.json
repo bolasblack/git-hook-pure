@@ -1,12 +1,14 @@
 {
   "name": "git-hook-pure",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "git hook more freely and quickly",
   "author": "c4605 <bolasblack@gmail.com>",
   "license": "MIT",
   "main": null,
   "scripts": {
-    "postinstall": "./node_modules/git-hook-pure/install.sh ./git-hook-template.sh"
+    "test": "./tests/test-clean-code.sh",
+    "postinstall": "./install.sh",
+    "preuninstall": "./uninstall.sh"
   },
   "devDependencies": {
     "git-hook-pure": "file:."

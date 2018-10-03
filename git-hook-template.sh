@@ -1,8 +1,4 @@
 #!/bin/sh
-#
-# **Managed by [git-hook-pure](https://github.com/bolasblack/git-hook-pure)**
-#
-
 projectRoot=`git rev-parse --show-toplevel`
 hookName=`basename "$0"`
 gitParams="$*"
