@@ -11,7 +11,7 @@ source $(dirname $selfFullPath)/helpers.sh
 
 defualtTemplateContent=`cat ${selfFullPath%/*}/git-hook-template.sh`
 if [ $# -lt 1 ]; then
-  templateContent=`echo "$defualtTemplateContent" | tail -n+3`
+  templateContent=`echo "$defualtTemplateContent" | tail -n+2`
   hashbangMatcher='\(bash\|zsh\|sh\)$'
   templateContentHashbang=`echo "$defualtTemplateContent" | head -n1`
 else
