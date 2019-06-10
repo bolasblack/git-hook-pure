@@ -3,7 +3,7 @@ projectRoot=`git rev-parse --show-toplevel`
 hookName=`basename "$0"`
 gitParams="$*"
 
-function executeAllFiles() {
+executeAllFiles() {
   local hookFolderPath=$1
   for f in `ls -1 $hookFolderPath`; do
     if  [ ! -d $hookFolderPath/$f ]; then
