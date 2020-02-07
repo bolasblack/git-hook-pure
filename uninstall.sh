@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # check $0 is absolute path
 if [ ${0::1} = "/" ]; then

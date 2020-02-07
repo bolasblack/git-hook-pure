@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/usr/bin/env bash
 projectRoot=`git rev-parse --show-toplevel`
 hookName=`basename "$0"`
 gitParams="$*"

@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # check $0 is absolute path
 if [ ${0::1} = "/" ]; then
@@ -12,13 +12,13 @@ source $(dirname $selfFullPath)/helpers.sh
 defualtTemplateContent=`cat ${selfFullPath%/*}/git-hook-template.sh`
 if [ $# -lt 1 ]; then
   templateContent=`echo "$defualtTemplateContent" | tail -n+2`
-  hashbangMatcher='\(bash\|zsh\|sh\)$'
+  hashbangMatcher='\(bash\|zsh\)$'
   templateContentHashbang=`echo "$defualtTemplateContent" | head -n1`
 else
   templateContent=`cat $1`
-  if hasHashbang $templateContent; then
+  if hasHashbang "$templateContent"; then
     hashbangMatcher=`echo "$templateContent" | head -n1`
-    templateContentHashbang=$hashbangMatcher
+    templateContentHashbang="$hashbangMatcher"
     templateContent=`echo "$templateContent" | tail -n+2`
   fi
 fi
