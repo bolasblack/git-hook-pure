@@ -4,24 +4,27 @@ hookName=`basename "$0"`
 gitParams="$*"
 
 executeAllFiles() {
-  local hookFolderPath=$1
-  for f in `ls -1 $hookFolderPath`; do
-    if  [ ! -d $hookFolderPath/$f ]; then
-      if [ -x $hookFolderPath/$f ]; then
-        $hookFolderPath/$f "${@:2}" || exit 1
+  local hookFolderPath="$1"
+  local hookFilePath
+
+  for f in `ls -1 "$hookFolderPath"`; do
+    hookFilePath="$hookFolderPath"/"$f"
+    if  [ ! -d "$hookFilePath" ]; then
+      if [ -x "$hookFilePath" ]; then
+        "$hookFilePath" "${@:2}" || exit 1
       else
         echo "==============================================="
-        echo "WARNING: File $hookFolderPath/$f not executable"
+        echo "WARNING: File $hookFilePath not executable"
         echo "==============================================="
       fi
     fi
   done
 }
 
-hookFolderPath=$projectRoot/.githooks
-if [ -d $hookFolderPath ]; then
-  executeAllFiles $hookFolderPath $hookName "$@"
+hookFolderPath="$projectRoot"/.githooks
+if [ -d "$hookFolderPath" ]; then
+  executeAllFiles "$hookFolderPath" "$hookName" "$@"
 fi
-if [ -d $hookFolderPath/$hookName ]; then
-  executeAllFiles $hookFolderPath/$hookName "$@"
+if [ -d "$hookFolderPath"/"$hookName" ]; then
+  executeAllFiles "$hookFolderPath"/"$hookName" "$@"
 fi

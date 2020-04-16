@@ -2,7 +2,7 @@
 
 You needn't bootstrap nodejs in every git hook
 
-## Usage
+## Install with npm/yarn
 
 ```bash
 yarn add git-hook-pure -D
@@ -19,6 +19,12 @@ You can put an executable file in `.githooks/` or `.githooks/[hookName]/`.
 The file under `.githooks/` will be executed in all git hook and called by `/path/to/hook-file [hook name] [...git hook arguments]`.
 
 The file under `.githooks/[hookName]/` will be executed in specified git hook and called by `/path/to/hook-file [...git hook arguments]`.
+
+## Install without npm/yarn
+
+```bash
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/bolasblack/git-hook-pure/master/install.sh)"
+```
 
 ## Work with [git lfs](https://git-lfs.github.com/)
 
@@ -55,7 +61,7 @@ Change npm script to:
 {
   // ...
   "scripts": {
-    "postinstall": "./node_modules/git-hook-pure/install.sh /the/path/to/template/file"
+    "postinstall": "./node_modules/git-hook-pure/git-hook-pure.sh install /the/path/to/template/file"
   }
 }
 ```
