@@ -7,8 +7,8 @@
   "main": null,
   "scripts": {
     "test": "./tests/test-clean-code.sh",
-    "postinstall": "./install.sh",
-    "preuninstall": "./uninstall.sh"
+    "postinstall": "./git-hook-pure.sh install",
+    "preuninstall": "./git-hook-pure.sh uninstall"
   },
   "devDependencies": {
     "git-hook-pure": "file:."
