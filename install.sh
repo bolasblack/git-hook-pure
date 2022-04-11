@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
+set -euo pipefail
+
 INSTALL_PATH="${INSTALL_PATH:-./scripts/git-hook-pure.sh}"
 
 mkdir -p "$(dirname "$INSTALL_PATH")"

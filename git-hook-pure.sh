@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
+set -euo pipefail
+
 # ====================== helpers ======================
 
 hookNames=`cat <<EOF
@@ -161,7 +163,7 @@ Commands:
 USAGE
 }
 
-case "$1" in
+case "${1:-}" in
   install)
     install "${@:2}"
   ;;
@@ -169,7 +171,7 @@ case "$1" in
     uninstall
   ;;
   -h|--help|*)
-    if [ ! "$_GIT_HOOK_PURE_RUN_ENV" = "test" ]; then
+    if [ ! "${_GIT_HOOK_PURE_RUN_ENV:-}" = "test" ]; then
       usage
       exit
     fi
