@@ -65,3 +65,7 @@ Change npm script to:
   }
 }
 ```
+
+## Skip installation when running `npm install`
+
+You can use the environment variable `GIT_HOOK_PURE_SKIP_INSTALL=1` to avoid the running of the install scripts.

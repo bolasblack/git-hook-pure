@@ -2,6 +2,11 @@
 
 set -euo pipefail
 
+if [ ! -z "${GIT_HOOK_PURE_SKIP_INSTALL:-}" ]; then
+  echo "[git-hook-pure] installation skipped"
+  exit
+fi
+
 # ====================== helpers ======================
 
 hookNames=`cat <<EOF
