@@ -11,7 +11,8 @@ executeAllFiles() {
     hookFilePath="$hookFolderPath"/"$f"
     if  [ ! -d "$hookFilePath" ]; then
       if [ -x "$hookFilePath" ]; then
-        "$hookFilePath" "${@:2}" || exit 1
+        shift 2
+        "$hookFilePath" "$@" || exit 1
       else
         echo "==============================================="
         echo "WARNING: File $hookFilePath not executable"
