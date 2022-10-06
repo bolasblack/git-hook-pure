@@ -69,3 +69,9 @@ Change npm script to:
 ## Skip installation when running `npm install`
 
 You can use the environment variable `GIT_HOOK_PURE_SKIP_INSTALL=1` to avoid the running of the install scripts.
+
+## Not working with `pnpm` v7
+
+1. Add setting into project `.npmrc`: `echo side-effects-cache=false > .npmrc`
+2. Re-install dependencies: `rm -f node_modules/.pnpm/lock.yaml && pnpm install`
+3. Add a reaction to this issue and wish some day we can add this setting for `git-hook-pure` only: https://github.com/pnpm/pnpm/issues/5002
