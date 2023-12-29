@@ -1,0 +1,19 @@
+lockfileVersion: '6.0'
+
+settings:
+  autoInstallPeers: true
+  excludeLinksFromLockfile: false
+
+devDependencies:
+  git-hook-pure:
+    specifier: file:.
+    version: 'file:'
+
+packages:
+
+  'file:':
+    resolution: {directory: '', type: directory}
+    name: git-hook-pure
+    hasBin: true
+    requiresBuild: true
+    dev: true
