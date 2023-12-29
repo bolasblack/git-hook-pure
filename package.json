@@ -9,10 +9,12 @@
   "bin": "./git-hook-pure.sh",
   "scripts": {
     "test": "./tests/test-clean-code.sh",
+    "release": "standard-version",
     "postinstall": "./git-hook-pure.sh install",
     "preuninstall": "./git-hook-pure.sh uninstall"
   },
   "devDependencies": {
-    "git-hook-pure": "file:."
+    "git-hook-pure": "file:.",
+    "standard-version": "^9.5.0"
   }
 }
