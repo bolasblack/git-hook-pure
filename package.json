@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
   "name": "git-hook-pure",
-  "version": "3.2.1",
+  "version": "3.3.0",
   "description": "git hook more freely and quickly",
   "author": "c4605 <bolasblack@gmail.com>",
   "license": "MIT",
