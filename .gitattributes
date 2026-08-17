@@ -1,0 +1,3 @@
+*.sh text eol=lf
+.mise.toml text eol=lf
+src/modules.list text eol=lf

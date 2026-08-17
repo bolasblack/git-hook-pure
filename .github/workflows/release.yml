@@ -1,0 +1,51 @@
+# A human-published GitHub Release is rebuilt from its exact tag, verified, and
+# receives one standalone executable plus its SHA-256 manifest.
+name: release
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing release tag to rebuild and attach assets to
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-attach:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: refs/tags/${{ github.event.release.tag_name || inputs.tag }}
+
+      - uses: jdx/mise-action@v4
+
+      - name: Verify release identity
+        env:
+          TAG: ${{ github.event.release.tag_name || inputs.tag }}
+        run: scripts/check-release.sh --tagged "$TAG"
+
+      - name: Test source and standalone artifact
+        run: mise run test
+
+      - name: Smoke-test exact release artifact
+        env:
+          TAG: ${{ github.event.release.tag_name || inputs.tag }}
+        run: |
+          test "$(dist/git-hook-pure --version)" = "${TAG#v}"
+          dist/git-hook-pure --help >/dev/null
+
+      - name: Prepare verified release assets
+        run: scripts/prepare-release-assets.sh dist
+
+      - name: Attach verified assets to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name || inputs.tag }}
+        run: gh release upload "$TAG" dist/git-hook-pure dist/SHA256SUMS --clobber

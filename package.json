@@ -1,20 +1,21 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
   "name": "git-hook-pure",
-  "version": "3.3.0",
-  "description": "git hook more freely and quickly",
+  "version": "4.0.0",
+  "description": "Dependency-free Git hook dispatcher with repository-local setup",
   "author": "c4605 <bolasblack@gmail.com>",
   "license": "MIT",
-  "main": null,
-  "bin": "./git-hook-pure.sh",
-  "scripts": {
-    "test": "./tests/test-clean-code.sh",
-    "release": "standard-version",
-    "postinstall": "./git-hook-pure.sh install",
-    "preuninstall": "./git-hook-pure.sh uninstall"
+  "bin": {
+    "git-hook-pure": "scripts/npm-cli.sh"
   },
-  "devDependencies": {
-    "git-hook-pure": "file:.",
-    "standard-version": "^9.5.0"
+  "files": [
+    "install-standalone.sh",
+    "dist/git-hook-pure",
+    "scripts/npm-cli.sh",
+    "scripts/postinstall.sh"
+  ],
+  "scripts": {
+    "prepack": "mise run build",
+    "postinstall": "sh ./scripts/postinstall.sh"
   }
 }

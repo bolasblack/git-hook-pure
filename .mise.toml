@@ -1,0 +1,10 @@
+[tools]
+node = "24"
+
+[tasks.build]
+description = "Build the deterministic standalone executable"
+run = "sh ./scripts/build.sh"
+
+[tasks.test]
+description = "Test the source loader, standalone artifact, and distribution adapters"
+run = "bash ./tests/run.sh"

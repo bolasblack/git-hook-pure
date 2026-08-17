@@ -1,0 +1,42 @@
+# A pushed v* tag creates an unpublished GitHub Release from the reviewed note.
+# Publishing that draft is the human gate that triggers release.yml.
+name: draft-release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing tag to draft a release for (for example v4.0.0)
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  draft:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: refs/tags/${{ inputs.tag || github.ref_name }}
+
+      - name: Verify exact tag, package version, and release note
+        env:
+          TAG: ${{ inputs.tag || github.ref_name }}
+        run: scripts/check-release.sh --tagged "$TAG"
+
+      - name: Create draft release from the reviewed note
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag || github.ref_name }}
+        run: |
+          note="docs/releases/${TAG}.md"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "a release for $TAG already exists; leaving it untouched" >&2
+            exit 0
+          fi
+          gh release create "$TAG" --verify-tag --draft --title "git-hook-pure $TAG" --notes-file "$note"

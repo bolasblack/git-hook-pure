@@ -1,3 +1,3 @@
 #!/bin/bash
 
-yarn test
+mise run test
