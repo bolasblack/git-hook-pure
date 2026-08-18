@@ -7,4 +7,15 @@ run = "sh ./scripts/build.sh"
 
 [tasks.test]
 description = "Test the source loader, standalone artifact, and distribution adapters"
-run = "bash ./tests/run.sh"
+depends = ["test:source", "test:standalone"]
+run = "bash ./tests/run.sh support"
+
+[tasks."test:source"]
+description = "Test the source loader"
+depends = ["build"]
+run = "bash ./tests/run.sh source"
+
+[tasks."test:standalone"]
+description = "Build and test the standalone artifact"
+depends = ["build"]
+run = "bash ./tests/run.sh standalone"
