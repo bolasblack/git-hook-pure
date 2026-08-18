@@ -105,7 +105,18 @@ printf 'preflight recovery bytes  \nwithout final newline' >"$preflight/sentinel
 printf 'transaction recovery bytes\n' >"$transaction/sentinel"
 chmod 640 "$preflight/sentinel"
 chmod 751 "$transaction/sentinel"
-printf '%s\n%s\n' "$preflight" "$transaction" >"$record"
+if preflight_mode=$(stat -c '%a' "$preflight/sentinel" 2>/dev/null); then
+  :
+else
+  preflight_mode=$(stat -f '%Lp' "$preflight/sentinel")
+fi
+if transaction_mode=$(stat -c '%a' "$transaction/sentinel" 2>/dev/null); then
+  :
+else
+  transaction_mode=$(stat -f '%Lp' "$transaction/sentinel")
+fi
+printf '%s\n%s\n%s\n%s\n' \
+  "$preflight" "$transaction" "$preflight_mode" "$transaction_mode" >"$record"
 exec "$cli" "$action"
 EOF
   chmod +x "$path"
@@ -284,6 +295,11 @@ EOF
 
   rm -f "$repo/.githooks/10-fails" "$repo/.githooks/20-must-not-run" "$trace"
   printf '%s\n' '#!/bin/sh' >"$repo/.githooks/10-not-executable"
+  chmod -x "$repo/.githooks/10-not-executable"
+  if [ -x "$repo/.githooks/10-not-executable" ]; then
+    printf '%s\n' 'SKIP: filesystem cannot represent a non-executable handler'
+    return 0
+  fi
   write_recording_handler "$repo/.githooks/20-must-not-run"
   set +e
   output=$(cd "$repo" && TRACE="$trace" "$hook" 2>&1)
@@ -601,7 +617,7 @@ EOF
   set +e
   (
     cd "$repo"
-    PATH="$stub_bin:$PATH" REAL_MV="$real_mv" TARGET_HOOK_NAME=applypatch-msg \
+    PATH="$(path_for_path_env "$stub_bin"):$PATH" REAL_MV="$real_mv" TARGET_HOOK_NAME=applypatch-msg \
       SIGNAL_ONCE_FILE="$repo/install-signalled" \
       HOME="$repo/home" GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null \
       "$git_hook_pure" install >/dev/null 2>&1
@@ -645,7 +661,7 @@ EOF
   set +e
   output=$(
     cd "$repo"
-    PATH="$stub_bin:$PATH" REAL_MV="$real_mv" TARGET_HOOK_NAME=applypatch-msg \
+    PATH="$(path_for_path_env "$stub_bin"):$PATH" REAL_MV="$real_mv" TARGET_HOOK_NAME=applypatch-msg \
       HOME="$repo/home" GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null \
       "$git_hook_pure" install 2>&1
   )
@@ -710,7 +726,7 @@ EOF
       (
         trap - "$signal"
         cd "$repo"
-        PATH="$stub_bin:$PATH" REAL_MV="$real_mv" TARGET_HOOK_NAME=applypatch-msg \
+        PATH="$(path_for_path_env "$stub_bin"):$PATH" REAL_MV="$real_mv" TARGET_HOOK_NAME=applypatch-msg \
           SIGNAL_ONCE_FILE="$repo/$action-$signal-signalled" TEST_SIGNAL="$signal" \
           HOME="$repo/home" GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null \
           "$git_hook_pure" "$action" >/dev/null 2>&1
@@ -757,7 +773,7 @@ EOF
   set +e
   output=$(
     cd "$repo"
-    PATH="$stub_bin:$PATH" REAL_MKDIR="$real_mkdir" REAL_MV="$real_mv" \
+    PATH="$(path_for_path_env "$stub_bin"):$PATH" REAL_MKDIR="$real_mkdir" REAL_MV="$real_mv" \
       TARGET_HANDLERS="$repo/.githooks" \
       HOME="$repo/home" GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null \
       "$git_hook_pure" install 2>&1
@@ -781,7 +797,7 @@ EOF
 
 test_install_fails_if_preexisting_handler_directory_disappears() {
   local repo hook original original_mode handler original_handler handler_mode backup
-  local resolved_handlers stub_bin real_chmod real_mv injection output status residue
+  local stub_bin real_chmod real_mv injection output status residue
 
   repo=$(new_repo handler-directory-present-to-missing)
   hook="$repo/.git/hooks/pre-commit"
@@ -802,8 +818,6 @@ EOF
   original_handler="$repo/original-project-content"
   cp -p "$handler" "$original_handler"
   handler_mode=$(file_mode "$original_handler")
-  resolved_handlers=$(git -C "$repo" rev-parse --path-format=absolute --show-toplevel)
-  resolved_handlers=$resolved_handlers/.githooks
   backup="$repo/.githooks.moved"
   injection="$repo/handler-move-injected"
   stub_bin="$repo/chmod-bin"
@@ -829,7 +843,7 @@ EOF
   set +e
   output=$(
     cd "$repo"
-    PATH="$stub_bin:$PATH" REAL_CHMOD="$real_chmod" REAL_MV="$real_mv" \
+    PATH="$(path_for_path_env "$stub_bin"):$PATH" REAL_CHMOD="$real_chmod" REAL_MV="$real_mv" \
       TARGET_HANDLERS="$repo/.githooks" HANDLERS_BACKUP="$backup" \
       INJECTION_RECORD="$injection" HOME="$repo/home" \
       GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null \
@@ -840,7 +854,7 @@ EOF
 
   [ -f "$injection" ] || fail 'present-to-missing handler-directory injection did not run'
   [ "$status" -ne 0 ] || fail 'install ignored a missing pre-existing handler directory'
-  case "$output" in *"[git-hook-pure] handler directory changed"*"$resolved_handlers"*) ;;
+  case "$output" in *"[git-hook-pure] handler directory changed"*"$repo/.githooks"*) ;;
     *) fail 'handler-directory change had no actionable diagnostic' ;;
   esac
   case "$output" in *'parameter not set'*) fail 'handler-directory change leaked an unset-variable error' ;; esac
@@ -887,7 +901,7 @@ EOF
   (
     trap - QUIT
     cd "$repo"
-    PATH="$stub_bin:$PATH" REAL_MV="$real_mv" \
+    PATH="$(path_for_path_env "$stub_bin"):$PATH" REAL_MV="$real_mv" \
       HOME="$repo/home" GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null \
       "$git_hook_pure" install >/dev/null 2>&1
   )
@@ -1082,7 +1096,7 @@ test_install_migrates_a_legacy_managed_only_hook() {
 }
 
 test_install_refuses_core_hooks_path_before_mutation() {
-  local repo git_dir global_config included_config system_config
+  local repo global_config included_config system_config conditional_value
 
   repo=$(new_repo core-hooks-path)
   git -C "$repo" config core.hooksPath custom-hooks
@@ -1132,11 +1146,15 @@ test_install_refuses_core_hooks_path_before_mutation() {
     GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL="$global_config"
 
   repo=$(new_repo core-hooks-path-conditional-include)
-  git_dir=$(git -C "$repo" rev-parse --path-format=absolute --git-dir)
   global_config="$repo/global.gitconfig"
   included_config="$repo/conditional-included.gitconfig"
   git config --file "$included_config" core.hooksPath conditional-included-hooks
-  printf '[includeIf "gitdir:%s"]\n\tpath = %s\n' "$git_dir" "$included_config" >"$global_config"
+  git config --file "$global_config" \
+    "includeIf.gitdir/i:**/${repo##*/}/.git.path" "$included_config"
+  conditional_value=$(GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL="$global_config" \
+    git -C "$repo" config --includes --get core.hooksPath)
+  [ "$conditional_value" = conditional-included-hooks ] ||
+    fail 'conditional-include fixture did not activate core.hooksPath'
   assert_install_refused_without_mutation "$repo" conditional-include \
     GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL="$global_config"
 
@@ -1261,7 +1279,7 @@ EOF
   set +e
   output=$(
     cd "$repo"
-    PATH="$stub_bin:$PATH" HOME="$repo/home" \
+    PATH="$(path_for_path_env "$stub_bin"):$PATH" HOME="$repo/home" \
       GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null TMPDIR="$tmp" \
       "$git_hook_pure" uninstall 2>&1
   )
@@ -1326,7 +1344,7 @@ EOF
   set +e
   output=$(
     cd "$repo"
-    PATH="$stub_bin:$PATH" REAL_MKTEMP="$real_mktemp" \
+    PATH="$(path_for_path_env "$stub_bin"):$PATH" REAL_MKTEMP="$real_mktemp" \
       PREFLIGHT_RECORD="$preflight_record" INJECTION_RECORD="$injection" HOME="$repo/home" \
       GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null TMPDIR="$tmp" \
       "$git_hook_pure" install 2>&1
@@ -1381,7 +1399,7 @@ EOF
   set +e
   output=$(
     cd "$repo"
-    PATH="$stub_bin:$PATH" REAL_CP="$real_cp" HOME="$repo/home" \
+    PATH="$(path_for_path_env "$stub_bin"):$PATH" REAL_CP="$real_cp" HOME="$repo/home" \
       GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null TMPDIR="$tmp" \
       "$git_hook_pure" install 2>&1
   )
@@ -1408,7 +1426,7 @@ EOF
 
 test_successful_operations_preserve_pid_reuse_recovery_siblings() {
   local action repo hook tmp wrapper sibling_record preflight_sibling transaction_sibling
-  local preflight_expected transaction_expected residue
+  local preflight_expected transaction_expected preflight_mode transaction_mode residue
 
   for action in install uninstall; do
     repo=$(new_repo "pid-reuse-success-$action")
@@ -1443,13 +1461,15 @@ EOF
         TMPDIR="$tmp" "$wrapper" "$action" "$git_hook_pure" "$sibling_record" >/dev/null
     )
 
-    preflight_sibling=$(sed -n '1p' "$sibling_record")
-    transaction_sibling=$(sed -n '2p' "$sibling_record")
+    preflight_sibling=$(path_in_shell_coordinates "$(sed -n '1p' "$sibling_record")")
+    transaction_sibling=$(path_in_shell_coordinates "$(sed -n '2p' "$sibling_record")")
+    preflight_mode=$(sed -n '3p' "$sibling_record")
+    transaction_mode=$(sed -n '4p' "$sibling_record")
     assert_files_equal "$preflight_expected" "$preflight_sibling/sentinel"
     assert_files_equal "$transaction_expected" "$transaction_sibling/sentinel"
-    [ "$(file_mode "$preflight_sibling/sentinel")" = 640 ] ||
+    [ "$(file_mode "$preflight_sibling/sentinel")" = "$preflight_mode" ] ||
       fail "$action changed the preflight recovery mode"
-    [ "$(file_mode "$transaction_sibling/sentinel")" = 751 ] ||
+    [ "$(file_mode "$transaction_sibling/sentinel")" = "$transaction_mode" ] ||
       fail "$action changed the transaction recovery mode"
     for residue in "$tmp"/git-hook-pure-* "$repo/.git/hooks"/.git-hook-pure-*; do
       case "$residue" in
@@ -1465,6 +1485,7 @@ test_operation_cleans_mktemp_output_when_assignment_is_interrupted() {
   local action phase target repo hook snapshot snapshot_mode tmp stub_bin real_mktemp
   local record output status created expected_created residue other_hook wrapper sibling_record
   local preflight_sibling transaction_sibling preflight_expected transaction_expected
+  local preflight_mode transaction_mode
   real_mktemp=$(command -v mktemp)
 
   for action in install uninstall; do
@@ -1524,7 +1545,7 @@ EOF
       set +e
       output=$(
         cd "$repo"
-        PATH="$stub_bin:$PATH" REAL_MKTEMP="$real_mktemp" \
+        PATH="$(path_for_path_env "$stub_bin"):$PATH" REAL_MKTEMP="$real_mktemp" \
           MKTEMP_TARGET="$target" MKTEMP_RECORD="$record" \
           HOME="$repo/home" GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null \
           TMPDIR="$tmp" "$wrapper" "$action" "$git_hook_pure" "$sibling_record" 2>&1
@@ -1536,8 +1557,11 @@ EOF
       [ -s "$record" ] ||
         fail "$action $phase mktemp interruption created no recorded path: $output"
       IFS= read -r created <"$record"
-      preflight_sibling=$(sed -n '1p' "$sibling_record")
-      transaction_sibling=$(sed -n '2p' "$sibling_record")
+      created=$(path_in_shell_coordinates "$created")
+      preflight_sibling=$(path_in_shell_coordinates "$(sed -n '1p' "$sibling_record")")
+      transaction_sibling=$(path_in_shell_coordinates "$(sed -n '2p' "$sibling_record")")
+      preflight_mode=$(sed -n '3p' "$sibling_record")
+      transaction_mode=$(sed -n '4p' "$sibling_record")
       case "$phase" in
         preflight) expected_created=${preflight_sibling%.ABC123}.1.DEF456 ;;
         transaction) expected_created=${transaction_sibling%.ABC123}.1.DEF456 ;;
@@ -1548,9 +1572,9 @@ EOF
         fail "$action $phase mktemp interruption left its unassigned path: $created"
       assert_files_equal "$preflight_expected" "$preflight_sibling/sentinel"
       assert_files_equal "$transaction_expected" "$transaction_sibling/sentinel"
-      [ "$(file_mode "$preflight_sibling/sentinel")" = 640 ] ||
+      [ "$(file_mode "$preflight_sibling/sentinel")" = "$preflight_mode" ] ||
         fail "$action $phase cleanup changed the preflight recovery mode"
-      [ "$(file_mode "$transaction_sibling/sentinel")" = 751 ] ||
+      [ "$(file_mode "$transaction_sibling/sentinel")" = "$transaction_mode" ] ||
         fail "$action $phase cleanup changed the transaction recovery mode"
       assert_files_equal "$snapshot" "$hook"
       [ "$(file_mode "$hook")" = "$snapshot_mode" ] ||
@@ -1608,7 +1632,7 @@ EOF
   set +e
   output=$(
     cd "$repo"
-    PATH="$stub_bin:$PATH" REAL_GREP="$real_grep" GREP_COUNT="$state" \
+    PATH="$(path_for_path_env "$stub_bin"):$PATH" REAL_GREP="$real_grep" GREP_COUNT="$state" \
       HOME="$repo/home" GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null \
       TMPDIR="$tmp" "$git_hook_pure" install 2>&1
   )
@@ -1662,7 +1686,7 @@ EOF
   set +e
   output=$(
     cd "$repo"
-    PATH="$stub_bin:$PATH" REAL_GREP="$real_grep" HOME="$repo/home" \
+    PATH="$(path_for_path_env "$stub_bin"):$PATH" REAL_GREP="$real_grep" HOME="$repo/home" \
       GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null TMPDIR="$tmp" \
       "$git_hook_pure" uninstall 2>&1
   )
@@ -1719,7 +1743,7 @@ EOF
   set +e
   output=$(
     cd "$repo"
-    PATH="$stub_bin:$PATH" REAL_GREP="$real_grep" HOME="$repo/home" \
+    PATH="$(path_for_path_env "$stub_bin"):$PATH" REAL_GREP="$real_grep" HOME="$repo/home" \
       GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null TMPDIR="$tmp" \
       "$git_hook_pure" install 2>&1
   )
@@ -1777,7 +1801,7 @@ EOF
     set +e
     output=$(
       cd "$repo"
-      PATH="$stub_bin:$PATH" REAL_GIT="$real_git" GIT_FAILURE_POINT="$point" \
+      PATH="$(path_for_path_env "$stub_bin"):$PATH" REAL_GIT="$real_git" GIT_FAILURE_POINT="$point" \
         HOME="$repo/home" GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null \
         TMPDIR="$tmp" "$git_hook_pure" install 2>&1
     )
@@ -1837,7 +1861,7 @@ EOF
     set +e
     output=$(
       cd "$repo"
-      PATH="$stub_bin:$PATH" REAL_GIT="$real_git" \
+      PATH="$(path_for_path_env "$stub_bin"):$PATH" REAL_GIT="$real_git" \
         GIT_ABSOLUTE_PATH_MALFORMED_POINT="$point" HOME="$repo/home" \
         GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null TMPDIR="$tmp" \
         "$git_hook_pure" install 2>&1
@@ -1895,7 +1919,7 @@ EOF
     set +e
     output=$(
       cd "$repo"
-      PATH="$stub_bin:$PATH" REAL_GIT="$real_git" \
+      PATH="$(path_for_path_env "$stub_bin"):$PATH" REAL_GIT="$real_git" \
         GIT_ABSOLUTE_PATH_MALFORMED_POINT="$point" TRACE="$trace" \
         "$hook" 2>&1
     )
@@ -1913,7 +1937,7 @@ EOF
   set +e
   output=$(
     cd "$repo"
-    PATH="$stub_bin:$PATH" REAL_GIT="$real_git" \
+    PATH="$(path_for_path_env "$stub_bin"):$PATH" REAL_GIT="$real_git" \
       GIT_ABSOLUTE_PATH_FAILURE_POINT=git-dir TRACE="$trace" "$hook" 2>&1
   )
   status=$?
@@ -2001,7 +2025,7 @@ EOF
   set +e
   (
     cd "$repo"
-    PATH="$stub_bin:$PATH" REAL_MV="$real_mv" TARGET_HOOK_NAME=applypatch-msg \
+    PATH="$(path_for_path_env "$stub_bin"):$PATH" REAL_MV="$real_mv" TARGET_HOOK_NAME=applypatch-msg \
       SIGNAL_ONCE_FILE="$repo/uninstall-signalled" \
       HOME="$repo/home" GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null \
       "$git_hook_pure" uninstall >/dev/null 2>&1
@@ -2108,7 +2132,7 @@ exit 70
 EOF
   chmod +x "$stub_bin/sed"
   set +e
-  PATH="$stub_bin:$PATH" \
+  PATH="$(path_for_path_env "$stub_bin"):$PATH" \
     git -C "$source" push -q "$linked" HEAD:refs/heads/policy-fault >/dev/null 2>&1
   status=$?
   git -C "$main" rev-parse --verify refs/heads/policy-fault >/dev/null 2>&1
@@ -2124,7 +2148,7 @@ exit 70
 EOF
   chmod +x "$stub_bin/dirname"
   set +e
-  PATH="$stub_bin:$PATH" \
+  PATH="$(path_for_path_env "$stub_bin"):$PATH" \
     git -C "$source" push -q "$linked" HEAD:refs/heads/policy-dirname-fault >/dev/null 2>&1
   status=$?
   git -C "$main" rev-parse --verify refs/heads/policy-dirname-fault >/dev/null 2>&1
@@ -3337,7 +3361,7 @@ EOF
   chmod +x "$stub_bin/git"
   (
     cd "$metadata"
-    PATH="$stub_bin:$PATH" REAL_GIT="$real_git" GIT_DIR=. TRACE="$trace" \
+    PATH="$(path_for_path_env "$stub_bin"):$PATH" REAL_GIT="$real_git" GIT_DIR=. TRACE="$trace" \
       "$hook" <"$payload"
   )
   printf '%s\n%s\n' mapped-handler mapped-handler >"$target/mapped-separate-expected"

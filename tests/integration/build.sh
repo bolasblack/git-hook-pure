@@ -92,9 +92,12 @@ test_source_loader_reports_a_missing_module_manifest() {
 
   [ "$status" -eq 1 ] || fail "missing source manifest exited with status $status: $output"
   prefix='[git-hook-pure] missing source module manifest: '
-  case "$output" in
-    "$prefix"*/src/modules.list) manifest=${output#"$prefix"} ;;
-    *) fail "missing source manifest had the wrong diagnostic: $output" ;;
+  manifest=${output#"$prefix"}
+  [ "$manifest" != "$output" ] ||
+    fail "missing source manifest had the wrong diagnostic prefix: $output"
+  case "$manifest" in
+    */src/modules.list) ;;
+    *) fail "missing source manifest had the wrong diagnostic path: $output" ;;
   esac
   reported_root=${manifest%/src/modules.list}
   reported_root=$(CDPATH= cd -- "$reported_root" && pwd -P) ||
@@ -128,7 +131,7 @@ EOF
   set +e
   output=$(
     cd "$outside"
-    PATH="$stub_bin:$PATH" MISE_CWD_FILE="$mise_cwd" bash "$fixture/tests/run.sh" 2>&1
+    PATH="$(path_for_path_env "$stub_bin"):$PATH" MISE_CWD_FILE="$mise_cwd" bash "$fixture/tests/run.sh" 2>&1
   )
   status=$?
   set -e
@@ -164,7 +167,7 @@ EOF
   set +e
   (
     trap - TERM
-    PATH="$shim_bin:$PATH" REAL_MKTEMP="$real_mktemp" \
+    PATH="$(path_for_path_env "$shim_bin"):$PATH" REAL_MKTEMP="$real_mktemp" \
       MKTEMP_CREATED_PATH="$created_path_file" \
       "$repo_root/scripts/build.sh" --output "$output"
   ) >/dev/null 2>&1
@@ -259,7 +262,7 @@ EOF
     set +e
     (
       trap - "$signal"
-      PATH="$signal_bin:$PATH" REAL_MV="$real_mv" TEST_SIGNAL="$signal" \
+      PATH="$(path_for_path_env "$signal_bin"):$PATH" REAL_MV="$real_mv" TEST_SIGNAL="$signal" \
         TARGET_OUTPUT="$output" \
         "$repo_root/scripts/build.sh" --output "$output" >/dev/null 2>&1
     )

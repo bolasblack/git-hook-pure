@@ -262,7 +262,14 @@ else
   curl -fsSL "$asset_url/git-hook-pure" -o "$stage_dir/git-hook-pure"
   curl -fsSL "$asset_url/SHA256SUMS" -o "$stage_dir/SHA256SUMS"
 
-  expected_lines=$(awk '$2 == "git-hook-pure" { print $1 }' "$stage_dir/SHA256SUMS")
+  expected_lines=$(awk '
+    {
+      name = $2
+      sub(/\r$/, "", name)
+      sub(/^\*/, "", name)
+      if (name == "git-hook-pure") print $1
+    }
+  ' "$stage_dir/SHA256SUMS")
   expected=$(printf '%s\n' "$expected_lines" | sed -n '1p')
   extra_expected=$(printf '%s\n' "$expected_lines" | sed -n '2p')
   if [ -z "$expected" ] || [ -n "$extra_expected" ] ||

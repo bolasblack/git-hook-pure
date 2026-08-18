@@ -1,8 +1,19 @@
-#!/bin/sh
+#!/usr/bin/env sh
 
 set -eu
 
 script_path=$0
+case "$script_path" in
+  [ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz]:/*|[ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz]:\\*)
+    if converted_script_path=$(cygpath -u "$script_path"); then
+      script_path=$converted_script_path
+    else
+      status=$?
+      printf '%s\n' '[git-hook-pure] unable to resolve the npm command path' >&2
+      exit "$status"
+    fi
+    ;;
+esac
 while [ -L "$script_path" ]; do
   link_dir=$(CDPATH= cd -P -- "$(dirname -- "$script_path")" && pwd)
   link_target=$(readlink "$script_path")

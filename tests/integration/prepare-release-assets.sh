@@ -71,7 +71,10 @@ test_prepare_release_assets_rejects_invalid_inventory_without_touching_manifest(
       target="$suite_tmp/$kind-target"
       printf '%s\n' "old-$kind-manifest" >"$target"
       chmod 640 "$target"
-      ln -s "$target" "$manifest"
+      if ! create_test_symlink "$target" "$manifest"; then
+        printf '%s\n' 'SKIP: filesystem cannot represent a manifest symlink'
+        continue
+      fi
       manifest_snapshot="$suite_tmp/$kind-manifest-snapshot"
       cp -p "$target" "$manifest_snapshot"
       manifest_mode=$(file_mode "$target")
@@ -89,11 +92,18 @@ test_prepare_release_assets_rejects_invalid_inventory_without_touching_manifest(
       binary-symlink)
         target="$suite_tmp/$kind-target-binary"
         write_release_asset "$target"
-        ln -s "$target" "$assets/git-hook-pure"
+        if ! create_test_symlink "$target" "$assets/git-hook-pure"; then
+          printf '%s\n' 'SKIP: filesystem cannot represent a binary symlink'
+          continue
+        fi
         ;;
       non-executable)
         printf '%s\n' '#!/bin/sh' ':' >"$assets/git-hook-pure"
         chmod 644 "$assets/git-hook-pure"
+        if [ -x "$assets/git-hook-pure" ]; then
+          printf '%s\n' 'SKIP: filesystem cannot represent a non-executable release asset'
+          continue
+        fi
         ;;
       *) write_release_asset "$assets/git-hook-pure" ;;
     esac
@@ -102,7 +112,10 @@ test_prepare_release_assets_rejects_invalid_inventory_without_touching_manifest(
       extra-directory) mkdir "$assets/extra" ;;
       extra-symlink)
         printf '%s\n' extra >"$suite_tmp/$kind-target"
-        ln -s "$suite_tmp/$kind-target" "$assets/extra"
+        if ! create_test_symlink "$suite_tmp/$kind-target" "$assets/extra"; then
+          printf '%s\n' 'SKIP: filesystem cannot represent an extra-asset symlink'
+          continue
+        fi
         ;;
       hidden-file) printf '%s\n' hidden >"$assets/.hidden" ;;
       hidden-directory) mkdir "$assets/.hidden" ;;
@@ -183,7 +196,7 @@ EOF
 
     set +e
     output=$(
-      PATH="$fake_bin:$PATH" \
+      PATH="$(path_for_path_env "$fake_bin"):$PATH" \
         REAL_CHECKSUM="$real_checksum" REAL_CHECKSUM_KIND="$real_kind" \
         TEST_CHECKSUM_BEHAVIOR="$behavior" \
         "$prepare" "$assets" 2>&1

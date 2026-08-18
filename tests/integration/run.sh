@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-set -euo pipefail
+set -Eeuo pipefail
 
 mode=${1:-all}
 if [ "$#" -gt 1 ]; then
@@ -22,10 +22,46 @@ package_tag=v$package_version
 suite_tmp=$(mktemp -d "${TMPDIR:-/tmp}/git-hook-pure-tests.XXXXXX")
 trap 'rm -rf "$suite_tmp"' EXIT
 
+current_test=
+failure_reported=false
+
+emit_failure() {
+  local message=$*
+  local annotation
+
+  if [ "${GITHUB_ACTIONS:-}" = true ]; then
+    annotation=${message//'%'/'%25'}
+    annotation=${annotation//$'\r'/'%0D'}
+    annotation=${annotation//$'\n'/'%0A'}
+    printf '::error title=git-hook-pure integration test::%s\n' "$annotation" >&2
+  fi
+  printf 'FAIL: %s\n' "$message" >&2
+}
+
 fail() {
-  printf 'FAIL: %s\n' "$*" >&2
+  failure_reported=true
+  emit_failure "$*"
   return 1
 }
+
+report_unexpected_test_failure() {
+  local status=$1
+  local command_text=$2
+
+  case $- in
+    *e*) ;;
+    *) return "$status" ;;
+  esac
+  [ -n "$current_test" ] || return "$status"
+  [ "$failure_reported" = false ] || return "$status"
+
+  failure_reported=true
+  emit_failure \
+    "unexpected command failure in $current_test (status $status): $command_text"
+  return "$status"
+}
+
+trap 'report_unexpected_test_failure "$?" "$BASH_COMMAND"' ERR
 
 [ -n "$package_version" ] || fail 'package.json has no testable version'
 
@@ -45,6 +81,39 @@ file_mode() {
   else
     stat -f '%Lp' "$1"
   fi
+}
+
+path_in_shell_coordinates() {
+  local path=$1
+
+  if command -v cygpath >/dev/null 2>&1; then
+    cygpath -u "$path"
+  else
+    printf '%s\n' "$path"
+  fi
+}
+
+path_for_path_env() {
+  path_in_shell_coordinates "$1"
+}
+
+create_test_symlink() {
+  local target=$1
+  local link=$2
+
+  # Git Bash may copy the target when native symbolic links are unavailable.
+  if ln -s "$target" "$link" 2>/dev/null && [ -L "$link" ]; then
+    return 0
+  fi
+  rm -rf -- "$link"
+
+  if command -v cygpath >/dev/null 2>&1 &&
+    MSYS=winsymlinks:nativestrict ln -s "$target" "$link" 2>/dev/null &&
+    [ -L "$link" ]; then
+    return 0
+  fi
+  rm -rf -- "$link"
+  return 1
 }
 
 new_repo() {
@@ -76,8 +145,12 @@ EOF
 
 run_test() {
   local name=$1
+
+  current_test=$name
+  failure_reported=false
   printf 'TEST %s\n' "$name"
   "$name"
+  current_test=
 }
 
 . "$repo_root/tests/integration/git-hook-pure.sh"

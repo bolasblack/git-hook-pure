@@ -200,11 +200,14 @@ test_install_standalone_rejects_escaping_and_symlink_paths() {
   repo=$(new_repo standalone-symlink-ancestor)
   outside="$suite_tmp/standalone-symlink-outside"
   mkdir -p "$outside"
-  ln -s "$outside" "$repo/tools"
-  prepare_standalone_rejection_fixture "$repo" standalone-symlink-ancestor
-  run_standalone_source_install "$repo" "$repo" tools/git-hook-pure
-  assert_standalone_rejection_preserved "$repo" "$standalone_install_output"
-  [ ! -e "$outside/git-hook-pure" ] || fail 'installer traversed an ancestor symlink'
+  if create_test_symlink "$outside" "$repo/tools"; then
+    prepare_standalone_rejection_fixture "$repo" standalone-symlink-ancestor
+    run_standalone_source_install "$repo" "$repo" tools/git-hook-pure
+    assert_standalone_rejection_preserved "$repo" "$standalone_install_output"
+    [ ! -e "$outside/git-hook-pure" ] || fail 'installer traversed an ancestor symlink'
+  else
+    printf '%s\n' 'SKIP: filesystem cannot represent an ancestor symlink'
+  fi
 
   repo=$(new_repo standalone-relative-escape)
   outside="$suite_tmp/standalone-relative-outside"
@@ -227,15 +230,18 @@ test_install_standalone_rejects_escaping_and_symlink_paths() {
   repo=$(new_repo standalone-compound-symlink-escape)
   outside="$suite_tmp/standalone-compound-link-target"
   mkdir -p "$outside"
-  ln -s "$outside" "$repo/link"
-  prepare_standalone_rejection_fixture "$repo" standalone-compound-symlink-escape
-  run_standalone_source_install "$repo" "$repo" link/../escape/git-hook-pure
-  assert_standalone_rejection_preserved "$repo" "$standalone_install_output"
-  case "$standalone_install_output" in *symlink*) ;;
-    *) fail 'compound path did not reject its symlink before processing ..' ;;
-  esac
-  [ ! -e "$repo/escape" ] || fail 'compound symlink path created its lexical target'
-  [ ! -e "$outside/git-hook-pure" ] || fail 'compound symlink path wrote outside'
+  if create_test_symlink "$outside" "$repo/link"; then
+    prepare_standalone_rejection_fixture "$repo" standalone-compound-symlink-escape
+    run_standalone_source_install "$repo" "$repo" link/../escape/git-hook-pure
+    assert_standalone_rejection_preserved "$repo" "$standalone_install_output"
+    case "$standalone_install_output" in *symlink*) ;;
+      *) fail 'compound path did not reject its symlink before processing ..' ;;
+    esac
+    [ ! -e "$repo/escape" ] || fail 'compound symlink path created its lexical target'
+    [ ! -e "$outside/git-hook-pure" ] || fail 'compound symlink path wrote outside'
+  else
+    printf '%s\n' 'SKIP: filesystem cannot represent a compound ancestor symlink'
+  fi
 }
 
 test_install_standalone_rejects_invalid_existing_destination_nodes() {
@@ -257,15 +263,18 @@ test_install_standalone_rejects_invalid_existing_destination_nodes() {
   repo=$(new_repo standalone-final-symlink)
   outside="$suite_tmp/standalone-final-symlink-outside"
   mkdir -p "$repo/tools" "$outside"
-  ln -s "$outside/target" "$repo/tools/git-hook-pure"
-  symlink_target=$(readlink "$repo/tools/git-hook-pure")
-  prepare_standalone_rejection_fixture "$repo" standalone-final-symlink
-  run_standalone_source_install "$repo" "$repo" tools/git-hook-pure
-  assert_standalone_rejection_preserved "$repo" "$standalone_install_output"
-  [ -L "$repo/tools/git-hook-pure" ] || fail 'final destination symlink was replaced'
-  [ "$(readlink "$repo/tools/git-hook-pure")" = "$symlink_target" ] ||
-    fail 'final destination symlink target was changed'
-  [ ! -e "$outside/target" ] || fail 'final destination symlink was followed'
+  if create_test_symlink "$outside/target" "$repo/tools/git-hook-pure"; then
+    symlink_target=$(readlink "$repo/tools/git-hook-pure")
+    prepare_standalone_rejection_fixture "$repo" standalone-final-symlink
+    run_standalone_source_install "$repo" "$repo" tools/git-hook-pure
+    assert_standalone_rejection_preserved "$repo" "$standalone_install_output"
+    [ -L "$repo/tools/git-hook-pure" ] || fail 'final destination symlink was replaced'
+    [ "$(readlink "$repo/tools/git-hook-pure")" = "$symlink_target" ] ||
+      fail 'final destination symlink target was changed'
+    [ ! -e "$outside/target" ] || fail 'final destination symlink was followed'
+  else
+    printf '%s\n' 'SKIP: filesystem cannot represent a final-path symlink'
+  fi
 
   repo=$(new_repo standalone-final-directory)
   mkdir -p "$repo/tools/git-hook-pure"
@@ -308,7 +317,7 @@ EOF
   set +e
   standalone_install_output=$(
     cd "$repo"
-    PATH="$stub_bin:$PATH" CURL_CALLED="$curl_called" \
+    PATH="$(path_for_path_env "$stub_bin"):$PATH" CURL_CALLED="$curl_called" \
       MKDIR_CALLED="$mkdir_called" REAL_MKDIR="$real_mkdir" \
       GIT_HOOK_PURE_VERSION="$package_version" INSTALL_PATH=.git/info/git-hook-pure \
       HOME="$repo/home" GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null \
@@ -414,7 +423,7 @@ EOF
     set +e
     standalone_install_output=$(
       cd "$repo"
-      PATH="$shim_bin:$PATH" REAL_GIT="$real_git" REAL_CP="$real_cp" \
+      PATH="$(path_for_path_env "$shim_bin"):$PATH" REAL_GIT="$real_git" REAL_CP="$real_cp" \
         REAL_MKDIR="$real_mkdir" COPY_MARKER="$copy_marker" \
         MKDIR_MARKER="$mkdir_marker" INJECT_QUERY="$query" \
         INJECTION_MARKER="$marker" GIT_HOOK_PURE_VERSION="$package_version" \
@@ -438,9 +447,9 @@ EOF
 }
 
 test_install_standalone_fetches_a_versioned_verified_release_asset() {
-  local assets version_dir expected stub_bin repo installed corrupt_assets previous status output
+  local assets version_dir expected expected_hash stub_bin repo installed corrupt_assets previous status output
   local uppercase_assets uppercase_dir uppercase_hash
-  local ordering_assets ordering_dir ordering_asset
+  local ordering_assets ordering_dir ordering_asset ordering_hash
   local convergence_assets convergence_dir convergence_asset signal_once
   local signal_bin real_mv
   assets="$suite_tmp/releases"
@@ -449,6 +458,8 @@ test_install_standalone_fetches_a_versioned_verified_release_asset() {
   expected="$version_dir/git-hook-pure"
   "$repo_root/scripts/build.sh" --output "$expected" >/dev/null
   write_sha256_manifest "$expected" "$version_dir/SHA256SUMS"
+  expected_hash=$(awk '{ print $1; exit }' "$version_dir/SHA256SUMS")
+  printf '%s  git-hook-pure\r\n' "$expected_hash" >"$version_dir/SHA256SUMS"
 
   stub_bin="$suite_tmp/curl-bin"
   mkdir -p "$stub_bin"
@@ -474,15 +485,19 @@ EOF
 
   repo=$(new_repo download-installer)
   installed="$repo/tool dir/git-hook-pure"
-  (
+  set +e
+  output=$(
     cd "$repo"
-    PATH="$stub_bin:$PATH" \
+    PATH="$(path_for_path_env "$stub_bin"):$PATH" \
       GIT_HOOK_PURE_VERSION="$package_version" \
       GIT_HOOK_PURE_RELEASE_BASE_URL="file://$assets" \
       INSTALL_PATH="$installed" \
       HOME="$repo/home" GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null \
-      sh "$repo_root/install-standalone.sh" >/dev/null
+      sh "$repo_root/install-standalone.sh" 2>&1
   )
+  status=$?
+  set -e
+  [ "$status" -eq 0 ] || fail "verified release asset installation failed: $output"
   assert_files_equal "$expected" "$installed"
   [ -x "$installed" ] || fail 'downloaded release asset is not executable'
   [ "$(find "$repo/tool dir" ! -path "$repo/tool dir" | wc -l | tr -d '[:space:]')" -eq 1 ] || \
@@ -500,7 +515,7 @@ EOF
   installed="$repo/tools/git-hook-pure"
   (
     cd "$repo"
-    PATH="$stub_bin:$PATH" \
+    PATH="$(path_for_path_env "$stub_bin"):$PATH" \
       GIT_HOOK_PURE_VERSION="$package_version" \
       GIT_HOOK_PURE_RELEASE_BASE_URL="file://$uppercase_assets" \
       INSTALL_PATH="$installed" \
@@ -531,6 +546,8 @@ esac
 EOF
   chmod +x "$ordering_asset"
   write_sha256_manifest "$ordering_asset" "$ordering_dir/SHA256SUMS"
+  ordering_hash=$(awk '{ print $1; exit }' "$ordering_dir/SHA256SUMS")
+  printf '%s *git-hook-pure\r\n' "$ordering_hash" >"$ordering_dir/SHA256SUMS"
   repo=$(new_repo download-publish-order)
   installed="$repo/tools/git-hook-pure"
   previous="$repo/old-executable"
@@ -538,17 +555,21 @@ EOF
   printf '%s\n' old-executable-must-remain-during-setup >"$installed"
   chmod 751 "$installed"
   cp -p "$installed" "$previous"
-  (
+  set +e
+  output=$(
     cd "$repo"
-    PATH="$stub_bin:$PATH" \
+    PATH="$(path_for_path_env "$stub_bin"):$PATH" \
       TEST_VERSION="$package_version" REAL_ARTIFACT="$expected" \
       OLD_EXECUTABLE="$previous" \
       GIT_HOOK_PURE_VERSION="$package_version" \
       GIT_HOOK_PURE_RELEASE_BASE_URL="file://$ordering_assets" \
       INSTALL_PATH="$installed" \
       HOME="$repo/home" GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null \
-      sh "$repo_root/install-standalone.sh" >/dev/null
+      sh "$repo_root/install-standalone.sh" 2>&1
   )
+  status=$?
+  set -e
+  [ "$status" -eq 0 ] || fail "setup-before-publication install failed: $output"
   assert_files_equal "$ordering_asset" "$installed"
   grep -q 'git-hook-pure start' "$repo/.git/hooks/pre-commit" || \
     fail 'staged executable did not configure hooks before publication'
@@ -584,7 +605,7 @@ EOF
   set +e
   (
     cd "$repo"
-    PATH="$stub_bin:$PATH" \
+    PATH="$(path_for_path_env "$stub_bin"):$PATH" \
       TEST_VERSION="$package_version" REAL_ARTIFACT="$expected" SIGNAL_ONCE_FILE="$signal_once" \
       GIT_HOOK_PURE_VERSION="$package_version" \
       GIT_HOOK_PURE_RELEASE_BASE_URL="file://$convergence_assets" \
@@ -605,7 +626,7 @@ EOF
 
   (
     cd "$repo"
-    PATH="$stub_bin:$PATH" \
+    PATH="$(path_for_path_env "$stub_bin"):$PATH" \
       TEST_VERSION="$package_version" REAL_ARTIFACT="$expected" SIGNAL_ONCE_FILE="$signal_once" \
       GIT_HOOK_PURE_VERSION="$package_version" \
       GIT_HOOK_PURE_RELEASE_BASE_URL="file://$convergence_assets" \
@@ -630,7 +651,7 @@ EOF
   set +e
   (
     cd "$repo"
-    PATH="$stub_bin:$PATH" \
+    PATH="$(path_for_path_env "$stub_bin"):$PATH" \
       GIT_HOOK_PURE_VERSION="$package_version" \
       GIT_HOOK_PURE_RELEASE_BASE_URL="file://$suite_tmp/corrupt-releases" \
       INSTALL_PATH="$installed" \
@@ -658,7 +679,7 @@ EOF
   set +e
   output=$(
     cd "$repo"
-    PATH="$stub_bin:$PATH" \
+    PATH="$(path_for_path_env "$stub_bin"):$PATH" \
       GIT_HOOK_PURE_VERSION="$package_version" \
       GIT_HOOK_PURE_RELEASE_BASE_URL="file://$assets" \
       INSTALL_PATH="$installed" \
@@ -701,7 +722,7 @@ EOF
   set +e
   (
     cd "$repo"
-    PATH="$signal_bin:$stub_bin:$PATH" \
+    PATH="$(path_for_path_env "$signal_bin"):$(path_for_path_env "$stub_bin"):$PATH" \
       REAL_MV="$real_mv" TARGET_HOOK_NAME=applypatch-msg \
       SIGNAL_ONCE_FILE="$repo/hook-setup-signalled" \
       GIT_HOOK_PURE_VERSION="$package_version" \
@@ -771,7 +792,7 @@ EOF
     (
       trap - "$signal"
       cd "$repo"
-      PATH="$stub_bin:$PATH" TEST_SIGNAL="$signal" CURL_COUNT_FILE="$repo/curl-count" \
+      PATH="$(path_for_path_env "$stub_bin"):$PATH" TEST_SIGNAL="$signal" CURL_COUNT_FILE="$repo/curl-count" \
         GIT_HOOK_PURE_VERSION="$package_version" \
         GIT_HOOK_PURE_RELEASE_BASE_URL="file://$assets" \
         INSTALL_PATH="$installed" \
@@ -822,7 +843,7 @@ EOF
   (
     trap - TERM
     cd "$repo"
-    PATH="$shim_bin:$PATH" REAL_MKTEMP="$real_mktemp" \
+    PATH="$(path_for_path_env "$shim_bin"):$PATH" REAL_MKTEMP="$real_mktemp" \
       MKTEMP_CREATED_PATH="$created_path_file" \
       GIT_HOOK_PURE_VERSION="$package_version" INSTALL_PATH="$installed" \
       HOME="$repo/home" GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null \
@@ -863,7 +884,7 @@ EOF
   set +e
   output=$(
     cd "$repo"
-    PATH="$stub_bin:$PATH" CURL_CALLED="$repo/curl-called" \
+    PATH="$(path_for_path_env "$stub_bin"):$PATH" CURL_CALLED="$repo/curl-called" \
       GIT_HOOK_PURE_VERSION="$package_version" INSTALL_PATH="$installed" \
       HOME="$repo/home" GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null \
       sh "$repo_root/install-standalone.sh" --source-executable '' 2>&1

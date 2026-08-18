@@ -1,4 +1,6 @@
 ensure_npm_package_tarball() {
+  local native_tarball
+
   [ -z "${npm_package_tarball:-}" ] || return 0
 
   npm_package_pack_dir="$suite_tmp/npm-pack"
@@ -10,6 +12,12 @@ ensure_npm_package_tarball() {
   )
   npm_package_tarball="$npm_package_pack_dir/$npm_package_tarball"
   [ -f "$npm_package_tarball" ] || fail 'npm pack did not produce a tarball'
+  if command -v cygpath >/dev/null 2>&1; then
+    native_tarball=$(cygpath -m "$npm_package_tarball")
+  else
+    native_tarball=$npm_package_tarball
+  fi
+  npm_package_file_spec=git-hook-pure@file:$native_tarball
 }
 
 test_npm_package_automatically_installs_hooks_and_reports_controls() {
@@ -43,6 +51,8 @@ test_npm_package_automatically_installs_hooks_and_reports_controls() {
     fail 'packed standalone installer is not executable'
   [ -x "$extracted/package/scripts/npm-cli.sh" ] ||
     fail 'packed npm CLI adapter is not executable'
+  [ "$(sed -n '1p' "$extracted/package/scripts/npm-cli.sh")" = '#!/usr/bin/env sh' ] ||
+    fail 'packed npm CLI shebang cannot be resolved by the Windows npm shim'
   [ -x "$extracted/package/scripts/postinstall.sh" ] ||
     fail 'packed npm postinstall adapter is not executable'
 
@@ -96,6 +106,44 @@ test_npm_package_automatically_installs_hooks_and_reports_controls() {
   case "$output" in *'GIT_HOOK_PURE_SKIP_INSTALL=1'*) ;;
     *) fail 'successful npm setup did not explain how to skip automatic installation' ;;
   esac
+}
+
+test_npm_cli_resolves_windows_script_coordinates() {
+  local tarball extracted caller fake_bin windows_cli output status
+  ensure_npm_package_tarball
+  tarball=$npm_package_tarball
+  extracted="$suite_tmp/npm-windows-script-coordinate"
+  caller="$suite_tmp/npm-windows-script-caller"
+  fake_bin="$suite_tmp/npm-windows-script-bin"
+  mkdir -p "$extracted" "$caller" "$fake_bin"
+  tar -xf "$tarball" -C "$extracted"
+  windows_cli='C:\package\scripts\npm-cli.sh'
+
+  cat >"$fake_bin/cygpath" <<'EOF'
+#!/bin/sh
+[ "$#" -eq 2 ] || exit 64
+[ "$1" = -u ] || exit 65
+[ "$2" = "$WINDOWS_CLI_PATH" ] || exit 66
+printf '%s\n' "$POSIX_CLI_PATH"
+EOF
+  chmod +x "$fake_bin/cygpath"
+
+  set +e
+  output=$(
+    cd "$caller"
+    WINDOWS_CLI_PATH="$windows_cli" \
+      POSIX_CLI_PATH="$extracted/package/scripts/npm-cli.sh" \
+      PATH="$fake_bin:$PATH" \
+      sh -c 'source_file=$1; shift; . "$source_file"' \
+      "$windows_cli" "$extracted/package/scripts/npm-cli.sh" --version 2>&1
+  )
+  status=$?
+  set -e
+
+  [ "$status" -eq 0 ] ||
+    fail "npm CLI did not resolve its Windows script path: $output"
+  [ "$output" = "$package_version" ] ||
+    fail "npm CLI resolved the wrong package from its Windows script path: $output"
 }
 
 test_npm_auto_install_failure_is_nonfatal_and_actionable() {
@@ -217,6 +265,7 @@ test_npm_auto_install_only_skips_exact_one() {
 
 test_npx_vendors_the_packaged_standalone_executable() {
   local tarball repo output status vendored expected trace tree_before tree_after
+  local forbidden_bin command_name unavailable_manager runtime_status
   ensure_npm_package_tarball
   tarball=$npm_package_tarball
   repo=$(new_repo npx-standalone-vendor)
@@ -230,7 +279,7 @@ test_npx_vendors_the_packaged_standalone_executable() {
     HOME="$repo/home" GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null \
       GIT_HOOK_PURE_SKIP_INSTALL=1 \
       npm_config_cache="$suite_tmp/npm-cache" \
-      npx --yes "git-hook-pure@file:$tarball" install-standalone 2>&1
+      npx --yes "$npm_package_file_spec" install-standalone 2>&1
   )
   status=$?
   set -e
@@ -247,10 +296,28 @@ test_npx_vendors_the_packaged_standalone_executable() {
 
   trace="$repo/standalone.trace"
   write_recording_handler "$repo/.githooks/pre-commit/project-handler"
-  (
+  forbidden_bin="$repo/forbidden-runtime-commands"
+  mkdir -p "$forbidden_bin"
+  for command_name in npm npx git-hook-pure; do
+    cat >"$forbidden_bin/$command_name" <<'EOF'
+#!/bin/sh
+exit 97
+EOF
+    chmod +x "$forbidden_bin/$command_name"
+  done
+  unavailable_manager="$repo/tools/git-hook-pure.unavailable"
+  mv "$vendored" "$unavailable_manager"
+  if (
     cd "$repo"
-    TRACE="$trace" PATH=/usr/bin:/bin .git/hooks/pre-commit
-  )
+    TRACE="$trace" PATH="$forbidden_bin:$PATH" .git/hooks/pre-commit
+  ); then
+    runtime_status=0
+  else
+    runtime_status=$?
+  fi
+  mv "$unavailable_manager" "$vendored"
+  [ "$runtime_status" -eq 0 ] ||
+    fail 'vendored hook runtime failed without npm or an external manager binary'
   grep -Fq 'project-handler' "$trace" ||
     fail 'vendored hook runtime depended on npm or an external manager binary'
   [ "$($vendored --version)" = "$package_version" ] ||
@@ -279,7 +346,7 @@ test_npx_vendors_to_an_explicit_repository_relative_path() {
     cd "$nested"
     HOME="$repo/home" GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null \
       npm_config_cache="$suite_tmp/npm-cache" \
-      npx --yes "git-hook-pure@file:$tarball" install-standalone \
+      npx --yes "$npm_package_file_spec" install-standalone \
       scripts/git-hook-pure 2>&1
   )
   status=$?
@@ -309,7 +376,7 @@ test_npx_does_not_run_dependency_setup_before_its_command() {
     cd "$repo"
     HOME="$repo/home" GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null \
       npm_config_cache="$repo/.npm-cache" npm_config_foreground_scripts=true \
-      npx --yes "git-hook-pure@file:$tarball" install-standalone \
+      npx --yes "$npm_package_file_spec" install-standalone \
       /tmp/git-hook-pure-rejected-destination 2>&1
   )
   status=$?
@@ -326,7 +393,7 @@ test_npx_does_not_run_dependency_setup_before_its_command() {
     cd "$repo"
     HOME="$repo/home" GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null \
       npm_config_cache="$repo/.npm-cache" npm_config_foreground_scripts=true \
-      npx --yes "git-hook-pure@file:$tarball" install-standalone -h 2>&1
+      npx --yes "$npm_package_file_spec" install-standalone -h 2>&1
   )
   status=$?
   set -e
@@ -345,7 +412,7 @@ test_npx_does_not_run_dependency_setup_before_its_command() {
     cd "$repo"
     HOME="$repo/home" GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null \
       npm_config_cache="$repo/.npm-cache" npm_config_foreground_scripts=true \
-      npx --yes "git-hook-pure@file:$tarball" install-standalone '' 2>&1
+      npx --yes "$npm_package_file_spec" install-standalone '' 2>&1
   )
   status=$?
   set -e
@@ -370,7 +437,7 @@ test_npx_refuses_directory_syntax_before_hook_setup() {
       cd "$repo"
       HOME="$repo/home" GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null \
         npm_config_cache="$suite_tmp/npm-cache" \
-        npx --yes "git-hook-pure@file:$tarball" install-standalone "$target" 2>&1
+        npx --yes "$npm_package_file_spec" install-standalone "$target" 2>&1
     )
     status=$?
     set -e
@@ -410,7 +477,7 @@ test_npx_delegates_git_admin_safety_to_the_standalone_installer() {
     cd "$repo"
     HOME="$repo/home" GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null \
       npm_config_cache="$suite_tmp/npm-cache" \
-      npx --yes "git-hook-pure@file:$tarball" install-standalone .git/config 2>&1
+      npx --yes "$npm_package_file_spec" install-standalone .git/config 2>&1
   )
   status=$?
   set -e
@@ -439,6 +506,7 @@ test_npx_delegates_git_admin_safety_to_the_standalone_installer() {
 
 run_npm_package_integration_tests() {
   run_test test_npm_package_automatically_installs_hooks_and_reports_controls
+  run_test test_npm_cli_resolves_windows_script_coordinates
   run_test test_npm_auto_install_failure_is_nonfatal_and_actionable
   run_test test_npm_auto_install_can_be_skipped
   run_test test_npm_auto_install_only_skips_exact_one

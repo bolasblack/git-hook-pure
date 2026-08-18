@@ -23,6 +23,8 @@ test_release_workflows_checkout_and_verify_exact_tag_refs() {
     fail 'test workflow does not install repository tools through mise'
   grep -Fq 'run: mise run test' "$repo_root/.github/workflows/test.yml" ||
     fail 'test workflow bypasses the repository maintenance task'
+  grep -Fq 'timeout-minutes: 45' "$repo_root/.github/workflows/test.yml" ||
+    fail 'test workflow timeout is too short for the full Windows integration suite'
   grep -Fq 'uses: jdx/mise-action@v4' "$repo_root/.github/workflows/release.yml" ||
     fail 'release workflow does not install repository tools through mise'
   grep -Fq \
