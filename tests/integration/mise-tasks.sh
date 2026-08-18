@@ -1,5 +1,5 @@
 test_mise_owns_repository_maintenance_tasks() {
-  local actual expected fixture trace
+  local actual expected fixture fixture_root trace
 
   [ -f "$repo_root/.mise.toml" ] || fail 'repository maintenance tasks have no mise config'
 
@@ -22,11 +22,11 @@ prepack=mise run build'
   cp "$repo_root/.mise.toml" "$fixture/.mise.toml"
   cat >"$fixture/scripts/build.sh" <<'EOF'
 #!/bin/sh
-printf 'build:%s\n' "$PWD" >>"$TRACE"
+printf 'build:%s\n' "$(pwd -P)" >>"$TRACE"
 EOF
   cat >"$fixture/tests/run.sh" <<'EOF'
 #!/usr/bin/env bash
-printf 'test:%s\n' "$PWD" >>"$TRACE"
+printf 'test:%s\n' "$(pwd -P)" >>"$TRACE"
 EOF
   chmod +x "$fixture/scripts/build.sh" "$fixture/tests/run.sh"
 
@@ -39,7 +39,8 @@ EOF
     MISE_TASK_RUN_AUTO_INSTALL=false TRACE="$trace" \
     mise -C "$fixture" run --quiet test
 
-  printf 'build:%s\ntest:%s\n' "$fixture" "$fixture" >"$fixture/expected.trace"
+  fixture_root=$(CDPATH= cd -- "$fixture" && pwd -P)
+  printf 'build:%s\ntest:%s\n' "$fixture_root" "$fixture_root" >"$fixture/expected.trace"
   assert_files_equal "$fixture/expected.trace" "$trace"
 }
 

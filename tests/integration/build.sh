@@ -105,7 +105,7 @@ test_source_loader_reports_a_missing_module_manifest() {
 }
 
 test_top_level_test_runner_builds_from_the_repository_root() {
-  local fixture outside stub_bin mise_cwd output status
+  local fixture outside stub_bin mise_cwd actual_root expected_root output status
   fixture="$suite_tmp/top-level-test-runner"
   outside="$suite_tmp/top-level-test-runner-caller"
   stub_bin="$suite_tmp/top-level-test-runner-bin"
@@ -134,7 +134,9 @@ EOF
   set -e
 
   [ "$status" -eq 0 ] || fail "top-level test runner failed from another cwd: $output"
-  [ "$(cat "$mise_cwd")" = "$fixture" ] ||
+  actual_root=$(CDPATH= cd -- "$(cat "$mise_cwd")" && pwd -P)
+  expected_root=$(CDPATH= cd -- "$fixture" && pwd -P)
+  [ "$actual_root" = "$expected_root" ] ||
     fail "top-level test runner built outside the repository root: $(cat "$mise_cwd")"
 }
 
