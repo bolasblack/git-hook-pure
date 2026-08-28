@@ -2,7 +2,7 @@
 
 All notable changes to this project are documented in this file.
 
-## [4.0.0](https://github.com/bolasblack/git-hook-pure/compare/v3.3.0...v4.0.0) (2026-08-16)
+## [4.0.0](https://github.com/bolasblack/git-hook-pure/compare/v3.3.0...v4.0.0) (2026-08-28)
 
 ### Breaking changes
 
@@ -28,13 +28,18 @@ All notable changes to this project are documented in this file.
 - Isolate managed dispatch from existing hook state and install only hook
   protocols with defined composition semantics.
 - Add a deterministic single-file packager, checksum-verifying downloader,
-  staged-setup-before-publication semantics, npm artifact smoke tests, and
-  reviewed Draft/Publish GitHub Release workflows.
+  staged-setup-before-publication semantics, npm artifact smoke tests, and a
+  single SHA-pinned `draft-release` workflow that verifies the tag, reruns the
+  tests, rebuilds the executable, and attaches `git-hook-pure` and `SHA256SUMS`
+  to an unpublished draft for human publication.
 - Add a version-pinned `npx ... install-standalone` bootstrap that copies the exact npm
   package executable to a project-owned path without retaining the package dependency.
 - Make local npm installation attempt hook setup automatically, with an exact
   skip control, non-fatal actionable failure, explicit install/uninstall
   commands, and documentation for npm lifecycle-output suppression.
+- Support Windows Git Bash: the npm command adapter resolves Windows drive
+  paths and the standalone installer accepts CRLF and `*`-prefixed
+  `SHA256SUMS` entries; the test suite runs on Ubuntu, macOS, and Windows.
 
 ## [3.3.0](https://github.com/bolasblack/git-hook-pure/compare/v3.2.1...v3.3.0) (2023-12-29)
 

@@ -56,14 +56,14 @@ standalone executable to `tools/git-hook-pure`, installs the local Git hooks, an
 the project with no npm or external manager dependency at hook runtime:
 
 ```sh
-npx git-hook-pure@3.3.0 install-standalone
+npx git-hook-pure@4.0.0 install-standalone
 git add tools/git-hook-pure
 ```
 
 An optional repository-relative argument selects a different project-owned path:
 
 ```sh
-npx git-hook-pure@3.3.0 install-standalone scripts/git-hook-pure
+npx git-hook-pure@4.0.0 install-standalone scripts/git-hook-pure
 ```
 
 Use that selected path for later `install` and `uninstall` commands. The destination
@@ -90,7 +90,7 @@ and embedded version, runs hook setup from the staged executable, and publishes 
 executable only after setup succeeds:
 
 ```sh
-version=3.3.0
+version=4.0.0
 curl -fsSL \
   "https://raw.githubusercontent.com/bolasblack/git-hook-pure/v${version}/install-standalone.sh" \
   -o /tmp/install-git-hook-pure-standalone.sh
