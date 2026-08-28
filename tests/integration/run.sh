@@ -157,9 +157,7 @@ run_test() {
 . "$repo_root/tests/integration/build.sh"
 . "$repo_root/tests/integration/npm-package.sh"
 . "$repo_root/tests/integration/install-standalone.sh"
-. "$repo_root/tests/integration/check-release.sh"
-. "$repo_root/tests/integration/prepare-release-assets.sh"
-. "$repo_root/tests/integration/release-workflows.sh"
+. "$repo_root/tests/integration/ci-workflow.sh"
 . "$repo_root/tests/integration/mise-tasks.sh"
 
 if [ "$mode" != support ]; then
@@ -169,9 +167,7 @@ if [ "$mode" != core ]; then
   run_build_integration_tests
   run_npm_package_integration_tests
   run_install_standalone_integration_tests
-  run_check_release_integration_tests
-  run_prepare_release_assets_integration_tests
-  run_release_workflow_contract_tests
+  run_ci_workflow_contract_tests
   run_mise_task_integration_tests
 fi
 printf 'PASS: integration tests\n'

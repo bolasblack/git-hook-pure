@@ -56,14 +56,14 @@ standalone executable to `tools/git-hook-pure`, installs the local Git hooks, an
 the project with no npm or external manager dependency at hook runtime:
 
 ```sh
-npx git-hook-pure@4.0.0 install-standalone
+npx git-hook-pure@3.3.0 install-standalone
 git add tools/git-hook-pure
 ```
 
 An optional repository-relative argument selects a different project-owned path:
 
 ```sh
-npx git-hook-pure@4.0.0 install-standalone scripts/git-hook-pure
+npx git-hook-pure@3.3.0 install-standalone scripts/git-hook-pure
 ```
 
 Use that selected path for later `install` and `uninstall` commands. The destination
@@ -90,7 +90,7 @@ and embedded version, runs hook setup from the staged executable, and publishes 
 executable only after setup succeeds:
 
 ```sh
-version=4.0.0
+version=3.3.0
 curl -fsSL \
   "https://raw.githubusercontent.com/bolasblack/git-hook-pure/v${version}/install-standalone.sh" \
   -o /tmp/install-git-hook-pure-standalone.sh
@@ -250,10 +250,11 @@ interruptions from HUP, INT, QUIT, PIPE, and TERM. If automatic hook rollback it
 fails, the command reports and retains the recovery directory containing original
 backups.
 
-Release tags use a reviewed two-stage GitHub flow: the tag creates a Draft
-Release from `docs/releases/<tag>.md`; publishing the draft checks out the exact
-tag, reruns all tests, rebuilds the executable, creates `SHA256SUMS`, and uploads
-exactly those two assets. See the
+Release tags use a reviewed GitHub flow: pushing an annotated tag runs the pinned
+`draft-release` workflow, which checks out the exact tag, reruns all tests, rebuilds
+the executable, creates `SHA256SUMS`, and attaches exactly those two assets to an
+unpublished Draft Release built from `docs/releases/<tag>.md`. A human then reviews
+and publishes that draft. See the
 [release guide](https://github.com/bolasblack/git-hook-pure/blob/develop/docs/releasing.md).
 
 ## npm dependency compatibility
